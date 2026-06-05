@@ -1,0 +1,131 @@
+# nivelclaude — 「니벨아레나」 Claude 어시스턴트
+
+「니벨아레나」(Nivel Arena, 원작 「승리의 여신: 니케」 TCG)의 **① 룰 설명 ② 덱 설계 ③ 대전 시뮬레이션**을 Claude로 직접 수행하는 **인터랙티브 어시스턴트 프로젝트**입니다.
+
+모델을 학습하지 않고 **Claude + 결정론(deterministic) 헬퍼 + 룰/카드 grounding** 만으로 룰 해설·덱 합법성·대전 시뮬레이션을 즉시 해결합니다.
+
+---
+
+## 🎯 핵심 원칙 — Grounding First (환각 금지)
+
+이 프로젝트의 품질은 **모델이 카드/룰을 지어내지 않는 것**에 달려 있습니다.
+
+1. **카드 사실은 절대 자의로 회상하지 않는다.** 파워·히트·코스트·텍스트·키워드·소속은 항상 `tools/cardsdb.py` 또는 `card/cards_table.csv` 조회값을 인용.
+2. **룰 판단은 조항 번호를 인용한다.** `rule/rules.md` 의 `§5.1.2` 같은 조항을 근거로 댄다 (grep 가능 포맷).
+3. **수치·합법성·시뮬레이션은 결정론 헬퍼로 검증한다.** 말로 때우지 않고 `tools/` 스크립트로 수치를 보장.
+4. **카드 텍스트가 일반 룰을 덮어쓴다** (§1.3.1). 예외는 카드 텍스트 우선.
+
+---
+
+## 🧩 구성 요소
+
+### 1차 원천 데이터 (수정 금지)
+
+| 경로 | 내용 |
+|---|---|
+| `card/cards_table.csv` | 카드 DB — 813 고유 ID(variant 포함 1,072행) × 16컬럼 (BOM 포함 → `utf-8-sig`) |
+| `rule/rules.md` | 종합 룰 Ver.2.0 (11섹션, `§조항` 포맷) |
+| `rule/*.png` | 영역·레벨존·속성 도해 |
+
+### 결정론 헬퍼 (`tools/`, Python 3.11 stdlib only · 외부 의존 0)
+
+| 스크립트 | 용도 |
+|---|---|
+| `cardsdb.py` | 카드 조회/검색/필터 (사실의 단일 원천) |
+| `deck_validator.py` | 덱 합법성(§5.1.2) + 코스트 커브 |
+| `battle_calc.py` | 사이즈/전투/플레이가능 계산 |
+| `race_sim.py` | 레이스 클럭 몬테카를로(시드 고정 · *추정 모델*) |
+| `game_state.py` | **대전 상태 권위 엔진** — 셋업·합법성·전투/대미지·페이즈·승패·무결성 |
+
+### 에이전트 로스터 (`.claude/agents/`, 모두 한국어)
+
+**도메인 워커** — 사실·룰·설계·분석
+
+| 에이전트 | 역할 |
+|---|---|
+| `card-oracle` | 카드 사실 조회 (환각 방지의 1차 방벽) |
+| `rule-expert` | 룰·키워드·상호작용 해설 (조항 인용) |
+| `deck-architect` | 덱 설계·합법성 검증·아키타입/커브 |
+| `match-simulator` | 레이스 클럭·매치업 **확률 추정**(몬테카를로) |
+
+**대전 진행** — 턴 바이 턴 결정론 실제 대전
+
+| 에이전트 | 역할 |
+|---|---|
+| `game-master` | 심판·진행자·**상태 권위**. 합법성 검증·상태 전이·승패·정보 통제(클로즈드 핸드) |
+| `player-one` / `player-two` | 각 플레이어 의사결정 — **자기 가시 상태만** 보고 행동 선언 |
+| `play-logger` | 확정 행동을 서술 로그(`.md`) + 구조화 타임라인(`.json`)으로 기록 |
+
+---
+
+## 🚀 빠른 시작
+
+전제: Python 3.11+ (외부 패키지 불필요).
+
+### 카드 조회 · 덱 검증
+
+```bash
+# 카드 사실 조회
+python tools/cardsdb.py find "레이븐 적우"
+python tools/cardsdb.py filter --color 대지 --type UNIT --keyword 어태커
+
+# 덱 합법성 검증 (40장 / 서약색 / 동일ID≤3 / 트리거≤8)
+python tools/deck_validator.py Saved/Deck/raven-jeokwu.json
+```
+
+### 전투 · 레이스 계산
+
+```bash
+python tools/battle_calc.py size 6 3        # 사이즈 = 레벨6 + 대미지3 = 9
+python tools/battle_calc.py combat 5000 4000 # 공격 vs 방어 파워
+python tools/race_sim.py                     # 레이스 클럭 몬테카를로
+```
+
+### 실제 한 판 대전
+
+```bash
+# game-master 가 셋업 → 매치 폴더 자동 생성
+python tools/game_state.py init Saved/Deck/redhood-aggro.json Saved/Deck/raven-jeokwu.json \
+    --seed 42 --first P1 --match redhood-vs-raven
+# → Saved/PlayLog/<년월일-시분초>_redhood-vs-raven/ 폴더에 상태·로그 저장
+
+python tools/game_state.py show   <state.json> --view P1   # 클로즈드 핸드(자기 시점만)
+python tools/game_state.py play   <state.json> P1 BT01-004
+python tools/game_state.py attack <state.json> 0 --target face
+python tools/game_state.py check  <state.json>             # 무결성 검사
+```
+
+### Claude(에이전트)로 자연어 요청
+
+```text
+"레이븐 리더와 적우를 포함한 덱을 짜줘"        → deck-architect 가 설계·검증
+"관통이 정확히 어떻게 처리돼?"                 → rule-expert 가 §조항으로 해설
+"redhood-aggro 와 raven-jeokwu 를 대전시켜줘"  → game-master 가 한 판을 진행·기록
+```
+
+---
+
+## 📂 디렉터리 구조
+
+```
+nivelclaude/
+├── CLAUDE.md              # 프로젝트 지침 (Claude 용)
+├── README.md              # 본 문서 (사람 용)
+├── .claude/agents/        # 도메인 워커 4 + 대전 진행 4 (GM/P1/P2/로거)
+├── card/                  # 카드 DB + 이미지 (1차 원천)
+├── rule/                  # 룰북 + 도해 (1차 원천)
+├── tools/                 # 결정론 헬퍼 5종
+└── Saved/                 # 사용자 데이터 (gitignore 전체 — 로컬 보관)
+    ├── Deck/              #   덱 JSON
+    └── PlayLog/           #   매치별 폴더 <년월일-시분초>_<매치명>/ → .md·.json·.state.json
+```
+
+> 덱(`Saved/Deck/`)·플레이 로그(`Saved/PlayLog/`)와 카드 이미지(`card/images/`)는 `.gitignore` 로 제외되어 **로컬에만 보관**됩니다.
+
+---
+
+## ⚖️ 데이터 · 라이선스
+
+- 카드 정보·룰 텍스트·이미지의 저작권은 **원작자(「승리의 여신: 니케」 / SHIFT UP)** 에게 있습니다.
+- 본 저장소는 룰 학습·덱 연구 목적의 **비공식 팬 프로젝트**이며, 데이터는 grounding 용 참조로만 사용됩니다.
+- 결정론 헬퍼(`tools/`)와 에이전트 정의는 이 저장소의 산출물입니다.
