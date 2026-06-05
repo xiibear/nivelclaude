@@ -1,0 +1,19 @@
+# 카드 이미지 — 대용량·재다운로드 가능 (정본은 cards_table.csv)
+card/images/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS / 에디터
+.DS_Store
+Thumbs.db
+*.swp
+
+# 작업 임시
+_*.py
+*.tmp
+
+# 사용자 데이터 — 덱(Saved/Deck)·플레이 로그(Saved/PlayLog). 로컬 보관, 버전관리 제외
+Saved/
