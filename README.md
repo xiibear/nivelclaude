@@ -1,6 +1,6 @@
 # nivelclaude — 「니벨아레나」 Claude 어시스턴트
 
-「니벨아레나」(Nivel Arena, 원작 「승리의 여신: 니케」 TCG)의 **① 룰 설명 ② 덱 설계 ③ 대전 시뮬레이션**을 Claude로 직접 수행하는 **인터랙티브 어시스턴트 프로젝트**입니다.
+「니벨아레나」(Nivel Arena)의 **① 룰 설명 ② 덱 설계 ③ 대전 시뮬레이션**을 Claude로 직접 수행하는 **인터랙티브 어시스턴트 프로젝트**입니다.
 
 모델을 학습하지 않고 **Claude + 결정론(deterministic) 헬퍼 + 룰/카드 grounding** 만으로 룰 해설·덱 합법성·대전 시뮬레이션을 즉시 해결합니다.
 
@@ -60,48 +60,17 @@
 
 ## 🚀 빠른 시작
 
-전제: Python 3.11+ (외부 패키지 불필요).
-
-### 카드 조회 · 덱 검증
-
-```bash
-# 카드 사실 조회
-python tools/cardsdb.py find "레이븐 적우"
-python tools/cardsdb.py filter --color 대지 --type UNIT --keyword 어태커
-
-# 덱 합법성 검증 (40장 / 서약색 / 동일ID≤3 / 트리거≤8)
-python tools/deck_validator.py Saved/Deck/raven-jeokwu.json
-```
-
-### 전투 · 레이스 계산
-
-```bash
-python tools/battle_calc.py size 6 3        # 사이즈 = 레벨6 + 대미지3 = 9
-python tools/battle_calc.py combat 5000 4000 # 공격 vs 방어 파워
-python tools/race_sim.py                     # 레이스 클럭 몬테카를로
-```
-
-### 실제 한 판 대전
-
-```bash
-# game-master 가 셋업 → 매치 폴더 자동 생성
-python tools/game_state.py init Saved/Deck/redhood-aggro.json Saved/Deck/raven-jeokwu.json \
-    --seed 42 --first P1 --match redhood-vs-raven
-# → Saved/PlayLog/<년월일-시분초>_redhood-vs-raven/ 폴더에 상태·로그 저장
-
-python tools/game_state.py show   <state.json> --view P1   # 클로즈드 핸드(자기 시점만)
-python tools/game_state.py play   <state.json> P1 BT01-004
-python tools/game_state.py attack <state.json> 0 --target face
-python tools/game_state.py check  <state.json>             # 무결성 검사
-```
-
-### Claude(에이전트)로 자연어 요청
+**Claude Code**(CLI·IDE·데스크톱) 또는 [claude.ai/code](https://claude.ai/code) 에서 이 저장소를 열면 `CLAUDE.md` 지침과 `.claude/agents/` 의 에이전트 8종이 자동 로드됩니다. 아래처럼 **자연어로 요청**하면, Claude 가 `tools/` 의 결정론 헬퍼를 내부적으로 호출해 사실·수치를 grounding 한 답을 돌려줍니다.
 
 ```text
 "레이븐 리더와 적우를 포함한 덱을 짜줘"        → deck-architect 가 설계·검증
+"이 덱 합법성 봐줘"                            → deck-architect 가 PASS/FAIL 판정
+"레이븐 적우 카드 정보 알려줘"                 → card-oracle 가 정확한 수치 인용
 "관통이 정확히 어떻게 처리돼?"                 → rule-expert 가 §조항으로 해설
 "redhood-aggro 와 raven-jeokwu 를 대전시켜줘"  → game-master 가 한 판을 진행·기록
 ```
+
+> 💡 `tools/` 의 헬퍼는 Claude 가 사실·수치를 grounding 하려고 호출하는 **결정론 도구**입니다(LLM·네트워크 무관, 같은 입력 → 같은 출력). 사용자는 자연어로 요청만 하면 되고, 필요한 도구는 Claude 가 알아서 실행합니다.
 
 ---
 
@@ -126,6 +95,6 @@ nivelclaude/
 
 ## ⚖️ 데이터 · 라이선스
 
-- 카드 정보·룰 텍스트·이미지의 저작권은 **원작자(「승리의 여신: 니케」 / SHIFT UP)** 에게 있습니다.
+- 카드 정보·룰 텍스트·이미지의 저작권은 **원작자**에게 있습니다.
 - 본 저장소는 룰 학습·덱 연구 목적의 **비공식 팬 프로젝트**이며, 데이터는 grounding 용 참조로만 사용됩니다.
 - 결정론 헬퍼(`tools/`)와 에이전트 정의는 이 저장소의 산출물입니다.
